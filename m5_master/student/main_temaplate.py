@@ -14,7 +14,7 @@ lcd = Display()
 sleep(1)
 i2c = I2C(
     0,
-    sda=Pin(0),
+    sda=Pin(25),
     scl=Pin(26),
     freq=100000
 )
