@@ -1,3 +1,16 @@
+# 第5回 M5StickC PLUS2 外観検査 main.py テンプレート
+#
+# 目的:
+#   HUSKYLENS が返した Class ID を M5StickC PLUS2 で判定し、
+#   LCD と Relay Unit に出力する。
+#
+# 今回の対応:
+#   ID1 / ID2 -> OK    -> Relay OFF
+#   ID3 / ID4 -> NG    -> Relay ON
+#   その他    -> RETRY -> Relay ON
+#
+# TODO の部分を完成させること。
+
 from machine import Pin, I2C
 import time
 
@@ -5,38 +18,27 @@ from display import Display
 from huskylens import HuskyLens
 
 
-# ========================================
-# ピン設定
-# ========================================
-
-HOLD_PIN = 4
-
+# --------------------------------------------------
+# 使用する GPIO
+# --------------------------------------------------
 BUTTON_PIN = 37
 RELAY_PIN = 32
-
 HUSKY_SDA = 25
 HUSKY_SCL = 26
 
 
-# ========================================
-# 初期化
-# ========================================
-
-# M5StickC PLUS2 の電源保持
-hold = Pin(HOLD_PIN, Pin.OUT)
-hold.value(1)
-
-# Button A
+# --------------------------------------------------
+# 入出力の準備
+# --------------------------------------------------
 button = Pin(BUTTON_PIN, Pin.IN)
-
-# Relay Unit
 relay = Pin(RELAY_PIN, Pin.OUT)
-relay.value(0)
 
-# LCD
+# 今回の方針：
+# 検査結果がまだ分からない起動直後は安全側の ON にする。
+relay.value(1)
+
 lcd = Display()
 
-# HUSKYLENS
 i2c = I2C(
     0,
     sda=Pin(HUSKY_SDA),
@@ -47,71 +49,64 @@ i2c = I2C(
 husky = HuskyLens(i2c)
 
 
-# ========================================
-# LCD表示
-# ========================================
-
+# --------------------------------------------------
+# LCD にメッセージを表示する関数
+# --------------------------------------------------
 def show_message(message):
     lcd.clear()
     lcd.text2x(message, 10, 20)
     lcd.show()
 
 
-# ========================================
-# ワーク判定
-# ========================================
-
+# --------------------------------------------------
+# ワークを1回検査する関数
+# --------------------------------------------------
 def inspect_work():
-
+    # HUSKYLENS から Class ID を取得する
     object_id = husky.get_id()
-
     print("ID =", object_id)
 
-    # TODO:
-    # ID1 / ID2 のときは OK
-    # ID3 / ID4 のときは NG
-    # それ以外は RETRY
-    #
-    # show_message("...")
-    # relay.value(...)
-
+    # ID1 / ID2 は OK
     if object_id in (1, 2):
-        # TODO: OK の表示とRelay制御
+        # TODO 1:
+        # LCD に "OK" と表示する
+        # Relay を OFF にする
         pass
 
+    # ID3 / ID4 は NG
     elif object_id in (3, 4):
-        # TODO: NG の表示とRelay制御
+        # TODO 2:
+        # LCD に "NG" と表示する
+        # Relay を ON にする
         pass
 
+    # その他 / 未認識は RETRY
     else:
-        # TODO: RETRY の表示
-        # 判定できない場合は安全側としてRelay ON
+        # TODO 3:
+        # LCD に "RETRY" と表示する
+        # 安全側として Relay を ON にする
         pass
 
 
-# ========================================
+# --------------------------------------------------
 # メイン処理
-# ========================================
-
+# --------------------------------------------------
 show_message("READY")
 
 try:
-
     while True:
-
-        # Button A は押すと 0
+        # Button A は Active Low
+        # 押すと 0 になる
         if button.value() == 0:
-
             inspect_work()
 
-            # 押しっぱなしで何度も判定しないよう、
-            # ボタンを離すまで待つ
+            # ボタンを離すまで待つ。
+            # 1回押しただけで何度も検査されることを防ぐ。
             while button.value() == 0:
                 time.sleep_ms(10)
 
         time.sleep_ms(10)
 
 finally:
-
-    # Thonnyで停止したときはRelayをOFF
-    relay.value(0)
+    # プログラム終了時も、結果不明として安全側へ倒す。
+    relay.value(1)

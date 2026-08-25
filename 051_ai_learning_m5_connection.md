@@ -1,292 +1,179 @@
-# 第5回 技術補足資料
-## M5StickC PLUS2 + HUSKYLENS + Relay Unit の接続とプログラミング
+# HUSKYLENS 学習と M5StickC PLUS2 接続 補足資料
 
-この資料は、第5回の作業指示書
-`05_huskylens_m5_inspection_v4.md` のうち、
-**M5StickC PLUS2への配線・接続・プログラミング方法**を説明する技術資料である。
+作業の順序は 050_huskylens_m5_inspection.md に従ってください。
+この資料は、第5回の作業で必要になる技術事項を確認するための補足資料です。
+
+目的は長いプログラムを書くことではなく、次の流れを理解することです。
+
+```text
+入力
+ ↓
+HUSKYLENS から Class ID を取得
+ ↓
+M5StickC PLUS2 が判断
+ ↓
+LCD / Relay Unit へ出力
+```
 
 ---
 
-# 1. 今回つくるもの
+## 1. HUSKYLENS の役割
 
-今回の検査システムでは、HUSKYLENS がワークを4種類に分類し、
-M5StickC PLUS2 がその ID を **OK / NG** に変換する。
+HUSKYLENS は今回、設備全体の OK / NG を決定する装置として扱いません。
 
-```text
-HUSKYLENS
+HUSKYLENS の役割は、画像を分類して **Class ID を返すこと** です。
 
-ID1 : 青・青・青 ─┐
-                   ├──→ OK
-ID2 : 黄・黄・黄 ─┘
+今回の対応は次の通りです。
 
-ID3 : 青・青・赤 ─┐
-                   ├──→ NG
-ID4 : 黄・黄・赤 ─┘
-```
+| ID | 学習するワーク | M5側の意味 |
+|---|---|---|
+| 1 | 青・青・青 | OK |
+| 2 | 黄・黄・黄 | OK |
+| 3 | 青・青・赤 | NG |
+| 4 | 黄・黄・赤 | NG |
 
-さらに、Button A を「ワークが検査位置へ来た」という信号の代わりにして、
-判定結果を LCD と Relay Unit に出力する。
-
-```text
-Button A
-   ↓
-HUSKYLENS の ID を読む
-   ↓
-M5StickC PLUS2 が OK / NG を判断
-   ↓
-LCD表示 + Relay Unit
-```
-
-後の授業では、Button A の部分を IR センサーに置き換える予定である。
+M5StickC PLUS2 がこの ID を読み、設備上の OK / NG / RETRY に変換します。
 
 ---
 
-# 2. 思い出そう：MicroPython の `main.py`
+## 2. HUSKYLENS の初期設定
 
-Raspberry Pi Pico の実習でも使用したように、MicroPython では
-マイコン本体に **`main.py`** という名前で保存されたプログラムが、
-電源ONやリセット後に自動実行される。
+- Algorithm：`Object Classification`
+- Learn Multiple：ON
+- Threshold：70
 
-M5StickC PLUS2 でも考え方は同じである。
+認識が不安定なときは Threshold をすぐ変更せず、次を先に確認します。
+
+1. カメラ位置
+2. 撮像距離
+3. 背景
+4. 照明
+5. 再学習
+
+その後、必要なら 65 / 70 / 75 程度で調整します。
+
+---
+
+## 3. 複数学習の操作
+
+複数学習では、特に「次の ID を覚える操作」が分かりにくいため、次の流れを確認してください。
+
+```text
+以前の学習を消す
+      ↓
+ID1 を押し続けて学習
+      ↓
+カウントダウン中に1回押す
+      ↓
+ID2 の学習待ち
+      ↓
+ID2 を押し続けて学習
+      ↓
+カウントダウン中に1回押す
+      ↓
+次の ID の学習待ち
+      ↓
+      …
+      ↓
+最後の ID を学習
+      ↓
+カウントダウン中は押さずに待つ
+      ↓
+学習終了
+```
+
+覚え方：
+
+> 次を覚える → カウントダウン中に1回押す
+>
+> ここで終わる → カウントダウン中は何も押さない
+
+### 今回の順番
+
+1. ID1：青・青・青
+2. ID2：黄・黄・黄
+3. ID3：青・青・赤
+4. ID4：黄・黄・赤
+
+M5 側のプログラムはこの ID 番号を前提にしています。
+
+ID の順番を間違えた場合、プログラムを書き換えて合わせるのではなく、今回の授業では HUSKYLENS を正しい順番で再学習してください。
+
+---
+
+## 4. M5StickC PLUS2 の起動
+
+MicroPython では、電源 ON / Reset 後に `boot.py`、その後 `main.py` が実行されます。
 
 ```mermaid
 flowchart TD
     A[電源 ON / Reset] --> B[MicroPython 起動]
     B --> C[boot.py]
     C --> D[main.py]
-    D --> E[検査プログラムを実行]
+    D --> E[検査プログラム]
 ```
 
-M5StickC PLUS2 には、教員側で次のファイルを準備済みである。
+M5StickC PLUS2 には教員側で次を導入済みです。
 
-| ファイル | 役割 |
-|---|---|
-| `boot.py` | M5StickC PLUS2 の起動時初期設定 |
-| `display.py` | LCD表示用モジュール |
-| `huskylens.py` | HUSKYLENSとの通信モジュール |
-| `main.py` | **今回、学生が作成する検査プログラム** |
+- `boot.py`
+- `display.py`
+- `huskylens.py`
 
-> `boot.py`、`display.py`、`huskylens.py` は変更しない。
+学生は主に `main.py` を編集します。
 
 ---
 
-# 3. Thonnyの「実行」と「本体へ保存」は違う
+## 5. Thonny の確認
 
-Thonny の ▶ ボタンでプログラムを実行できても、
-それだけでは電源を入れ直したときに自動実行されない。
+- Interpreter：MicroPython (ESP32)
+- M5StickC PLUS2 のシリアルポートを選ぶ
+- REPL が使えることを確認する
 
-完成したプログラムは、Thonny から
-
-```text
-MicroPython device
-      ↓
-main.py
-```
-
-として **M5StickC PLUS2本体へ保存する**。
-
-## 最後の確認
-
-1. `main.py` を M5StickC PLUS2 本体へ保存する
-2. リセットする、またはUSBを抜き差しする
-3. Thonny の ▶ を押さなくても `READY` から動作することを確認する
+最初から `main.py` を完成させず、各機能を1つずつ確認します。
 
 ---
 
-# 4. 今回使用するピン
+## 6. HUSKYLENS の I2C 接続
 
-M5StickC PLUS2 の今回使用するピンは次の通り。
+使用する GPIO：
 
-| 用途 | GPIO | 備考 |
-|---|---:|---|
-| 電源保持 HOLD | GPIO4 | `boot.py` で設定済み |
-| Button A | GPIO37 | 検査開始ボタン |
-| HUSKYLENS SDA | GPIO25 | I2C通信 |
-| HUSKYLENS SCL | GPIO26 | I2C通信 |
-| Relay Unit DIN | GPIO32 | Grove端子の黄色線 |
-| GPIO33 | 今回は未使用 | Grove端子の白色線 |
+| 用途 | GPIO |
+|---|---:|
+| HUSKYLENS SDA | GPIO25 |
+| HUSKYLENS SCL | GPIO26 |
+| Button A | GPIO37 |
+| Relay Unit | GPIO32 |
 
-## ピン番号は最初にまとめる
-
-プログラムの途中に `25` や `32` を何度も直接書くのではなく、
-最初に名前をつけておく。
-
-```python
-BUTTON_PIN = 37
-RELAY_PIN = 32
-
-HUSKY_SDA = 25
-HUSKY_SCL = 26
-```
-
-これによって、
-
-```python
-relay = Pin(RELAY_PIN, Pin.OUT)
-```
-
-のように、「何のピンか」が分かるプログラムになる。
-
----
-
-# 5. HUSKYLENS と M5StickC PLUS2 を結線する
-
-## 重要：配線中はUSBを外す
-
-**配線を変更するときは、M5StickC PLUS2 から USB ケーブルを外すこと。**
-
-配線完了後、**通電前に2人で確認し、その後教員のチェックを受ける。**
-
-## 配線
-
-| HUSKYLENS | M5StickC PLUS2 |
-|---|---|
-| VCC | 5V |
-| GND | GND |
-| SDA | GPIO25 |
-| SCL | GPIO26 |
-
-```text
-HUSKYLENS                 M5StickC PLUS2
-
- VCC  -------------------- 5V
- GND  -------------------- GND
- SDA  -------------------- GPIO25
- SCL  -------------------- GPIO26
-```
-
-### 注意
-
-- VCC と GND を逆にしない
-- SDA と SCL を逆にしない
-- GPIO0 は今回使用しない
-- 配線を引っ張った状態で使用しない
-
----
-
-# 6. Relay Unit の接続
-
-Relay Unit は M5StickC PLUS2 の Grove（HY2.0-4P）端子へ接続する。
-
-M5StickC PLUS2 の Grove端子は今回、次のように使用する。
-
-| Grove線 | M5StickC PLUS2 | Relay Unit |
-|---|---|---|
-| 黒 | GND | GND |
-| 赤 | 5V | 5V |
-| 黄 | GPIO32 | DIN |
-| 白 | GPIO33 | NC（未使用） |
-
-したがって、Relay Unit の制御ピンは **GPIO32** となる。
-
-```text
-GPIO32 = 0  → Relay OFF
-GPIO32 = 1  → Relay ON
-```
-
----
-
-# 7. 配線後の検収：I2C Scan
-
-配線後、いきなり完成プログラムを動かさない。
-
-まず HUSKYLENS が通信相手として見えているか確認する。
+I2C の作成：
 
 ```python
 from machine import Pin, I2C
 
-HUSKY_SDA = 25
-HUSKY_SCL = 26
-
 i2c = I2C(
     0,
-    sda=Pin(HUSKY_SDA),
-    scl=Pin(HUSKY_SCL),
+    sda=Pin(25),
+    scl=Pin(26),
     freq=100000
 )
+```
 
+HUSKYLENS の I2C Address は `0x32` です。
+
+```python
 print(i2c.scan())
 ```
 
-正常なら、Shell に
+成功例：
 
 ```text
 [50]
 ```
 
-と表示される。
-
-`50` は16進数では `0x32` で、HUSKYLENS の I2C アドレスである。
-
-## `[50]` が出ない場合
-
-プログラムを変更する前に、次の順番で確認する。
-
-```text
-VCC / GND
-   ↓
-SDA / SCL
-   ↓
-コネクタの抜け
-   ↓
-M5StickC PLUS2 を再起動
-   ↓
-i2c.scan() を再実行
-```
-
-> **配線が間違っている状態をプログラムで直すことはできない。**
+`50` は `0x32` の10進表示です。
 
 ---
 
-# 8. M5StickC PLUS2 の動作を一つずつ確認する
-
-最初から全部を組み合わせない。
-
-```text
-① Thonny / REPL
-      ↓
-② LCD
-      ↓
-③ Relay Unit
-      ↓
-④ HUSKYLENS I2C
-      ↓
-⑤ HUSKYLENS ID取得
-      ↓
-⑥ Button A
-      ↓
-⑦ main.py に統合
-```
-
----
-
-# 9. STEP 1：Thonny / REPL
-
-1. M5StickC PLUS2 をUSBでPCへ接続する
-2. Thonnyを起動する
-3. Interpreter に `MicroPython (ESP32)` を選ぶ
-4. M5StickC PLUS2 のシリアルポートを選ぶ
-5. Shell に `>>>` が表示されることを確認する
-
-Shell で、
-
-```python
-print("hello")
-```
-
-を実行する。
-
-```text
-hello
-```
-
-と表示されればOK。
-
----
-
-# 10. STEP 2：LCD表示
-
-`display.py` は準備済み。
+## 7. LCD の単体確認
 
 ```python
 from display import Display
@@ -298,59 +185,158 @@ lcd.text2x("HELLO", 10, 20)
 lcd.show()
 ```
 
-LCD に `HELLO` が表示されればOK。
-
-今回の LCD は、装置の状態を確認するためにも使用する。
-
-```text
-READY
-OK
-NG
-RETRY
-```
-
-などを表示する。
+画面に `HELLO` が表示されれば成功です。
 
 ---
 
-# 11. STEP 3：Relay Unit
+## 8. Relay Unit の単体確認
+
+Relay Unit は GPIO32 を使用します。
+
+- `1`：Relay ON
+- `0`：Relay OFF
 
 ```python
 from machine import Pin
-import time
 
 relay = Pin(32, Pin.OUT)
 
-relay.value(1)
-time.sleep(1)
-
-relay.value(0)
+relay.value(1)   # ON
+relay.value(0)   # OFF
 ```
 
-確認すること：
+今回の判定と Relay 出力の対応は次の通りです。
 
-- Relay Unit のLED
-- 「カチッ」という動作音
+| 状態 | Relay |
+|---|---|
+| OK | OFF |
+| NG | ON |
+| RETRY / 不明 | ON |
 
-> テスト終了時は Relay を **OFF** にする。
+NG / RETRY のときに Relay を ON にして、外部設備へ警告を出せる状態にします。
+
+### 8.1 Relay は電圧を変換する装置ではない
+
+ここは今回の重要ポイントです。
+
+次の4点を必ず理解してください。
+
+1. **Relay は昇圧器ではありません。**
+   M5 側の 5V を 24V に変換しているわけではありません。
+
+2. **M5 は Relay を ON / OFF しているだけです。**
+   M5 が 24V の表示灯を直接駆動しているわけではありません。
+
+3. **Relay の COM-NO 接点は、24V 側回路のスイッチとして働きます。**
+   24V は別に用意した 24V 電源から供給します。
+
+4. **M5 側の制御回路と、Relay 接点につないだ 24V 側回路は電気的につながっていません。**
+   Relay 内部では、M5 側の動作によって接点が機械的に開閉されます。
+
+```text
+【M5側：制御回路】                     【24V側：負荷回路】
+
+M5StickC PLUS2                         +24V
+      │                                  │
+      │ GPIO32                           │
+      ▼                                  ▼
+┌────────────── Relay Unit ──────────────────────────┐
+│  制御回路        機械的に接点を動かす       COM ──/ ── NO │
+└────────────────────────────────────────────────────┘
+      │                                          │
+     GND                                      24V表示灯
+                                                 │
+                                                0V
+
+        M5側から24V側へ電気が流れる接続ではない
+```
+
+短く言うと、
+
+> **M5 側は、24V 側回路にあるスイッチを遠隔操作している。**
+
+ということです。
+
+### 8.2 24V 表示灯を接続する場合
+
+適切な 24V DC 表示灯と 24V DC 電源が用意できた場合のみ行います。
+
+今回使用候補として確認した 24V 表示灯は、X1 / X2 のどちら向きに接続しても点灯することを教員側で確認済みです。
+
+接続の考え方：
+
+```text
+24V DC +
+   │
+   ▼
+Relay COM
+   │
+Relay NO
+   │
+   ▼
+表示灯 X1
+   │
+表示灯 X2
+   │
+24V DC 0V
+```
+
+X1 / X2 は逆でも構いません。
+
+この回路では、
+
+- Relay OFF → COM-NO が開く → 表示灯 消灯
+- Relay ON → COM-NO が閉じる → 表示灯 点灯
+
+となります。
+
+**24V 側の配線は、通電前に必ず教員の確認を受けてください。**
+
+### 8.3 理解確認
+
+次の質問に答えられることを到達条件とします。
+
+**Q1. 24V 電源を外したまま Relay を ON にすると、表示灯は点灯するか。**
+
+→ 点灯しません。Relay は 24V を作っていないからです。
+
+**Q2. M5 の GND と 24V 電源の 0V をつなぐ必要があるか。**
+
+→ 今回の Relay 接点を使った回路では必要ありません。M5 側と 24V 側は Relay 接点を境に電気的に別回路だからです。
+
+**Q3. Relay の役割を一言で説明すると何か。**
+
+→ M5 から操作できる、24V 側回路のスイッチです。
+
+### 8.4 今回扱わないこと
+
+実際の FA ラインでは、PLC の先に警告灯などが接続されています。
+
+しかし今回は、
+
+- PLC の入力回路
+- PLC との接続
+- ラダープログラム
+- PLC から実設備の警告灯を制御すること
+
+は扱いません。
+
+また、他の種類の FA センサ出力回路についても今回は扱いません。
+
+まずは **Relay が「別回路のスイッチ」であること** を確実に理解してください。
 
 ---
 
-# 12. STEP 4：HUSKYLENS の判定IDを読む
-
-`huskylens.py` は準備済み。
+## 9. HUSKYLENS の ID を取得する
 
 ```python
 from machine import Pin, I2C
 from huskylens import HuskyLens
 
-HUSKY_SDA = 25
-HUSKY_SCL = 26
-
 i2c = I2C(
     0,
-    sda=Pin(HUSKY_SDA),
-    scl=Pin(HUSKY_SCL),
+    sda=Pin(25),
+    scl=Pin(26),
     freq=100000
 )
 
@@ -360,392 +346,174 @@ object_id = husky.get_id()
 print(object_id)
 ```
 
-今回の学習内容は次の通り。
-
-| ID | ワーク | M5での判定 |
-|---:|---|---|
-| 1 | 青・青・青 | OK |
-| 2 | 黄・黄・黄 | OK |
-| 3 | 青・青・赤 | NG |
-| 4 | 黄・黄・赤 | NG |
-
-ワークを交換し、IDが変化することを確認する。
+4種類のワークを見せて、ID1〜ID4 が正しく返ることを確認します。
 
 ---
 
-# 13. STEP 5：Button A を読む
+## 10. Button A の確認
 
-Button A は **GPIO37**。
+Button A は GPIO37、Active Low です。
 
-今回のプログラムでは、
-
-```text
-押していない → 1
-押している   → 0
-```
-
-として扱う。
+- 押していない：`1`
+- 押している：`0`
 
 ```python
 from machine import Pin
-import time
 
 button = Pin(37, Pin.IN)
-
-while True:
-    print(button.value())
-    time.sleep_ms(100)
+print(button.value())
 ```
 
-Button A を押し、`1` と `0` が切り替わることを確認する。
+今回の Button A は、将来のワーク到着センサの代わりです。
+
+```text
+ワークを置く
+  ↓
+Button A
+  ↓
+検査開始
+```
+
+後で Button A をセンサへ交換しても、システム全体の流れはほぼ同じです。
 
 ---
 
-# 14. 今回のプログラムの流れ
+## 11. 判定部分を読む
+
+今回、特に理解してほしいのは次の部分です。
+
+```python
+object_id = husky.get_id()
+
+if object_id in (1, 2):
+    # OK
+elif object_id in (3, 4):
+    # NG
+else:
+    # RETRY
+```
+
+### `object_id in (1, 2)` の意味
+
+`object_id` が 1 または 2 なら True になります。
+
+今回、ID1 と ID2 は製品仕様上 OK として扱います。
+
+### `object_id in (3, 4)` の意味
+
+ID3 または ID4 なら NG とします。
+
+### `else` の意味
+
+ID1〜ID4 以外、または未認識の場合です。
+
+ここを OK にしてはいけません。
+
+今回は `RETRY` と表示し、要確認を外部へ示すため Relay を ON にします。
+
+---
+
+## 12. Class ID と OK / NG は別のもの
+
+次の2つを混同しないでください。
+
+```text
+HUSKYLENS
+画像 → Class ID
+
+M5StickC PLUS2
+Class ID → OK / NG / RETRY
+```
+
+HUSKYLENS 自身が「良品」「不良品」という製品仕様を理解しているわけではありません。
+
+---
+
+## 13. 未学習ワークについて
+
+製品仕様では、青・青・青 / 黄・黄・黄 以外は基本的に NG です。
+
+しかし今回 HUSKYLENS に学習させるのは4クラスだけです。
+
+そのため、未学習の混色ワークを置いたときに、必ず未認識になるとは限りません。
+
+既知の ID1〜ID4 のどれかへ誤分類される場合もあります。
+
+したがって今回の実習は、製品仕様上のすべての NG を完全に識別する設備を作ることが目的ではありません。
+
+目的は、
+
+> AIカメラの出力をマイコンが受け取り、設備として意味付けして出力する
+
+というシステム構造を理解することです。
+
+---
+
+## 14. Relay による外部警告出力
+
+今回の実習では、Relay を **M5 の判定結果を外部設備へ渡すための接点出力** として扱います。
+
+- 起動時：Relay ON (未判定のため警告側)
+- OK：Relay OFF
+- NG：Relay ON
+- RETRY / 不明：Relay ON
+
+適切な 24V 表示灯を接続した場合は、NG / RETRY で表示灯が点灯します。
+
+ここで大切なのは、未認識を勝手に OK としないことです。
+
+ただし、今回ここで扱っているのは「警告出力」の動作です。マイコン停止・断線・電源断まで含めた設備全体の Fail-safe 設計は、今回のスコープには含めません。
+
+---
+
+## 15. `main.py` をコピーするだけで終わらせない
+
+GitHub からファイルをコピーして動かすこと自体は問題ありません。
+
+ただし、動いただけでは理解したことにはなりません。
+
+少なくとも次の3問には答えられるようにしてください。
+
+1. Button A は何の代わりか
+2. HUSKYLENS は何を M5 に返しているか
+3. ID1 / ID2 と ID3 / ID4 で Relay の状態を変えているのはどこか
+
+余裕があれば、次も考えてください。
+
+4. 未認識を OK にしないのはなぜか
+5. 将来 Button A をセンサへ交換すると、どこを変更すればよいか
+
+---
+
+## 16. 全体の処理フロー
 
 ```mermaid
 flowchart TD
-    A[main.py 起動] --> B[GPIO / LCD / I2C 初期化]
-    B --> C[READY と表示]
-    C --> D{Button A が押された?}
-
-    D -- No --> D
-    D -- Yes --> E[HUSKYLENS から ID を取得]
-
-    E --> F{ID は?}
-
-    F -- ID1 または ID2 --> G[OK と表示]
-    G --> H[Relay OFF]
-
-    F -- ID3 または ID4 --> I[NG と表示]
-    I --> J[Relay ON]
-
-    F -- その他 / 判定不能 --> K[RETRY と表示]
-    K --> L[Relay ON]
-
-    H --> M[Button A を離すまで待つ]
-    J --> M
-    L --> M
-    M --> D
-```
-
-## なぜ「判定不能 → Relay ON」なのか
-
-検査装置では、判定できないワークを勝手に良品として流してはいけない。
-
-今回は、
-
-```text
-分からない → OKにしない
-```
-
-という **安全側の処理** を行う。
-
----
-
-# 15. `main.py` テンプレート
-
-次のテンプレートを使用し、`TODO` 部分を完成させる。
-
-```python
-from machine import Pin, I2C
-import time
-
-from display import Display
-from huskylens import HuskyLens
-
-
-# ========================================
-# ピン設定
-# ========================================
-
-BUTTON_PIN = 37
-RELAY_PIN = 32
-
-HUSKY_SDA = 25
-HUSKY_SCL = 26
-
-
-# ========================================
-# 初期化
-# ========================================
-
-button = Pin(BUTTON_PIN, Pin.IN)
-
-relay = Pin(RELAY_PIN, Pin.OUT)
-relay.value(0)
-
-lcd = Display()
-
-i2c = I2C(
-    0,
-    sda=Pin(HUSKY_SDA),
-    scl=Pin(HUSKY_SCL),
-    freq=100000
-)
-
-husky = HuskyLens(i2c)
-
-
-# ========================================
-# LCD表示
-# ========================================
-
-def show_message(message):
-    lcd.clear()
-    lcd.text2x(message, 10, 20)
-    lcd.show()
-
-
-# ========================================
-# ワーク判定
-# ========================================
-
-def inspect_work():
-
-    object_id = husky.get_id()
-    print("ID =", object_id)
-
-    if object_id in (1, 2):
-        # TODO: LCDに OK と表示
-        # TODO: RelayをOFF
-        pass
-
-    elif object_id in (3, 4):
-        # TODO: LCDに NG と表示
-        # TODO: RelayをON
-        pass
-
-    else:
-        # TODO: LCDに RETRY と表示
-        # TODO: 安全側としてRelayをON
-        pass
-
-
-# ========================================
-# メイン処理
-# ========================================
-
-show_message("READY")
-
-try:
-    while True:
-
-        # Button A は押すと 0
-        if button.value() == 0:
-
-            inspect_work()
-
-            # 押しっぱなしで何度も検査しないよう、
-            # ボタンを離すまで待つ
-            while button.value() == 0:
-                time.sleep_ms(10)
-
-        time.sleep_ms(10)
-
-finally:
-    # Thonnyで停止した場合はRelayをOFFにする
-    relay.value(0)
+    A[READY] --> B{Button A?}
+    B -- No --> B
+    B -- Yes --> C[HUSKYLENS get_id]
+    C --> D{Class ID}
+    D -- ID1 or ID2 --> E[OK]
+    D -- ID3 or ID4 --> F[NG]
+    D -- other --> G[RETRY]
+    E --> H[Relay OFF]
+    F --> I[Relay ON]
+    G --> I
+    H --> B
+    I --> B
 ```
 
 ---
 
-# 16. TODO部分で考えること
+## 17. デバッグするときの順序
 
-## ID1 / ID2
+全体コードを何度も書き換える前に、次の順番で確認します。
 
-```text
-LCD   : OK
-Relay : OFF
-```
-
-## ID3 / ID4
-
-```text
-LCD   : NG
-Relay : ON
-```
-
-## その他 / 判定不能
-
-```text
-LCD   : RETRY
-Relay : ON
-```
-
-Pythonの難しい文法を増やすことが目的ではない。
-
-今回重要なのは、
-
-```text
-HUSKYLENSの分類結果
-        ↓
-設備としてのOK / NG
-```
-
-へ変換する処理である。
-
----
-
-# 17. 動作確認
-
-## 配線
-
-- [ ] USBを外して配線した
-- [ ] VCC / GND を確認した
-- [ ] SDA = GPIO25 を確認した
-- [ ] SCL = GPIO26 を確認した
-- [ ] Relay Unit が Grove端子に接続されている
-- [ ] 通電前に教員チェックを受けた
-
-## I2C
-
-- [ ] `i2c.scan()` で `[50]` が表示された
-
-## M5単体
-
-- [ ] LCDに文字を表示できた
-- [ ] Button A の値を読めた
-- [ ] Relay Unit を単独でON/OFFできた
-
-## 検査
-
-- [ ] ID1 → `OK` / Relay OFF
-- [ ] ID2 → `OK` / Relay OFF
-- [ ] ID3 → `NG` / Relay ON
-- [ ] ID4 → `NG` / Relay ON
-
-## `main.py`
-
-- [ ] M5StickC PLUS2 本体へ `main.py` として保存した
-- [ ] リセット後に `READY` が表示された
-- [ ] Thonny の ▶ を押さなくても検査できた
-
----
-
-# 18. 動かないときの確認順序
-
-## HUSKYLENS
-
-```text
-配線
- ↓
-i2c.scan()
- ↓
-[50] が出るか
- ↓
-huskylens.py
- ↓
-get_id()
-```
-
-## Relay Unit
-
-```text
-Grove接続
- ↓
-GPIO32
- ↓
-relay.value(1)
- ↓
-relay.value(0)
-```
-
-## LCD
-
-```text
-display.py
- ↓
-Display()
- ↓
-clear()
- ↓
-text2x()
- ↓
-show()
-```
-
-## Button A
-
-```text
-GPIO37
- ↓
-button.value()
- ↓
-押したとき 0 になるか
-```
-
-> **全部を同時にデバッグしない。一つずつ確認する。**
-
-### M5StickC PLUS2 がうまく再起動しない場合
-
-外部機器を接続した状態で起動が不安定な場合は、
-いったん HUSKYLENS を外して M5StickC PLUS2 単体で起動を確認し、
-その後もう一度接続を確認する。
-
----
-
-# 19. 今回の制御プログラムの基本
-
-今回覚えてほしい基本形は、
-
-```text
-入力
- ↓
-判断
- ↓
-出力
-```
-
-である。
-
-今回の場合は、
-
-```text
-入力
-Button A + HUSKYLENS
-
-       ↓
-
-判断
-ID1 / ID2 → OK
-ID3 / ID4 → NG
-
-       ↓
-
-出力
-LCD + Relay Unit
-```
-
-となる。
-
-後日、Button A を IR センサーへ置き換えても、
-この基本構造は変わらない。
-
----
-
-# 完成状態
-
-```text
-電源 ON
-   ↓
-main.py 自動起動
-   ↓
-READY
-   ↓
-ワークを置く
-   ↓
-Button A
-   ↓
-HUSKYLENS
-   ↓
-ID1 ～ ID4
-   ↓
-M5StickC PLUS2
-   ↓
-OK / NG
-   ↓
-LCD + Relay Unit
-```
-
-ここまで動けば完成。
+1. Thonny から M5StickC PLUS2 が見える
+2. LCD が表示できる
+3. Relay を ON / OFF できる
+4. HUSKYLENS の配線を確認する
+5. `i2c.scan()` で `[50]` が出る
+6. `husky.get_id()` で ID が取れる
+7. Button A の値が変化する
+8. 最後に `main.py` を確認する
